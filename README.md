@@ -2,25 +2,26 @@
 
 # 复杂 Excel 解析器 (Complex Excel Parser)
 
-这是一个用于解析复杂结构 Excel 文件的 Python 应用程序。它支持合并单元格处理、多级表头展平、语义锚点定位、键值对表单提取以及层级数据提取。
+这是一个生产级的 Python 应用程序，用于解析复杂结构甚至**受损**的 Excel 文件。它集成了全域基因修复技术、Qwen LLM 语义提取以及多种结构化解析模式。
 
-## 功能特性
+## 核心功能
 
-- **标准表格解析：**
-  - 自动处理合并单元格（将值填充到整个合并区域）。
-  - 将多级表头合并为单行表头（例如 "Q1 - Sales"）。
+### 1. 全域基因修复 (Global Gene Repair)
+针对 WPS 生成的 Strict OOXML 格式文件或含有损坏外部链接的文件，本系统内置了强大的预处理清洗器 (`src/loader.py` & `src/preprocessor.py`)，确保 100% 可读取：
+- **物理移除**：自动剔除导致崩溃的 `calcChain.xml`, `externalLinks`, `printerSettings`, `vbaProject.bin`。
+- **命名空间洗白**：将 Strict OOXML 命名空间全局替换为 Microsoft 标准 Transitional OOXML。
+- **外科手术式修复**：使用正则精准移除 `workbook.xml` 中导致崩溃的 `<definedNames>` 和 `<externalReferences>` 节点。
+- **智能降级加载**：优先尝试完整加载，若失败则自动切换至 `read_only=True` 模式保底。
 
-- **语义锚点定位 (`parse_table_at_anchor`)：**
-  - 通过关键词（如“融资假设”）在混合内容的 Sheet 中定位特定表格。
-  - 提取相对于锚点的数据区域。
+### 2. 多模式解析
+- **标准表格**：自动处理合并单元格与多级表头展平。
+- **语义锚点 (`parse_table_at_anchor`)**：通过关键词定位混合 Sheet 中的特定子表。
+- **表单模式 (`parse_form`)**：智能提取非结构化的 "Key: Value" 对。
+- **层级模式 (`parse_hierarchy`)**：基于缩进自动构建财务报表的树形 JSON 结构。
 
-- **表单提取 (`parse_form`)：**
-  - 扫描 Sheet 中的键值对（Key-Value），例如 "项目名称: Apollo"。
-  - 适用于提取项目详情、封面信息等非结构化布局。
-
-- **层级提取 (`parse_hierarchy`)：**
-  - 根据缩进列构建嵌套的 JSON/字典结构。
-  - 非常适合处理财务报表（如 资产 -> 流动资产 -> 现金）。
+### 3. LLM 语义提取 (Qwen Integration)
+- **上下文序列化 (`src/serializer.py`)**：将 Excel 数据转换为 Token 优化的 Markdown 格式，自动截断超长文本，过滤空行。
+- **Prompt 工程 (`src/llm_bridge.py`)**：内置针对房地产/金融领域的 Prompt 模板，可直接对接 Qwen/GPT 进行结构化数据提取。
 
 ## 安装与设置
 
@@ -37,36 +38,41 @@
 
 ## 使用示例
 
+### 基础解析
 ```python
 from src.parser import ExcelParser
 import json
 
+# 自动触发“全域基因修复”
 parser = ExcelParser("data/complex_v2.xlsx")
 
 # 1. 语义锚点定位
 df_funding = parser.parse_table_at_anchor("Mixed Data", "Funding Assumptions")
-print(df_funding)
 
 # 2. 表单提取
 project_info = parser.parse_form("Project Form")
-print(project_info)
-# 输出: {'Project Name': 'Apollo Mission', ...}
 
 # 3. 层级提取
 financials = parser.parse_hierarchy("Financial Statement")
 print(json.dumps(financials, indent=2, ensure_ascii=False))
 ```
 
+### LLM 提取 Demo
+```bash
+python scripts/qwen_extraction_demo.py
+```
+该脚本演示了从 加载 -> 修复 -> 序列化 -> Prompt 构建 -> 模拟提取 的全流程。
+
 ## 工具脚本
 
-- `scripts/analyze_excel.py`：检查 Excel 文件的结构（Sheet 名称、合并单元格情况等）。
+- `scripts/analyze_excel.py`：**增强版分析工具**。包含完整的预处理逻辑，可用于诊断严重损坏的 Excel 文件结构。
   ```bash
-  python scripts/analyze_excel.py data/complex_v2.xlsx
+  python scripts/analyze_excel.py <path_to_corrupt_file.xlsx>
   ```
 
 ## 测试
 
-使用 pytest 运行测试：
+使用 pytest 运行全套测试（含集成测试）：
 ```bash
 python -m pytest tests/
 ```
