@@ -1,11 +1,22 @@
 import pandas as pd
 import openpyxl
 from openpyxl.utils import range_boundaries
+from src.preprocessor import preprocess_excel
+import os
 
 class ExcelParser:
     def __init__(self, filepath: str):
-        self.filepath = filepath
-        self.wb = openpyxl.load_workbook(filepath, data_only=True)
+        self.original_filepath = filepath
+        # Preprocess the file to handle WPS/non-standard issues
+        self.processed_filepath = preprocess_excel(filepath)
+        try:
+            self.wb = openpyxl.load_workbook(self.processed_filepath, data_only=True)
+        finally:
+            # Clean up temp file?
+            # If we delete it now, openpyxl might fail if it does lazy loading (read_only=False usually loads all, but let's be safe)
+            # Standard openpyxl loads into memory, so it should be safe to delete after load_workbook returns.
+            if os.path.exists(self.processed_filepath):
+                os.remove(self.processed_filepath)
 
     def get_sheet_names(self) -> list[str]:
         return self.wb.sheetnames
