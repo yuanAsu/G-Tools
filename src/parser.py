@@ -10,7 +10,15 @@ class ExcelParser:
         # Preprocess the file to handle WPS/non-standard issues
         self.processed_filepath = preprocess_excel(filepath)
         try:
-            self.wb = openpyxl.load_workbook(self.processed_filepath, data_only=True)
+            # Load with data_only=True to get values.
+            # read_only=False is required to force dimension recalculation after cleaning.
+            # keep_links=False prevents openpyxl from trying to resolve external links we just removed.
+            self.wb = openpyxl.load_workbook(
+                self.processed_filepath,
+                data_only=True,
+                read_only=False,
+                keep_links=False
+            )
         finally:
             # Clean up temp file?
             # If we delete it now, openpyxl might fail if it does lazy loading (read_only=False usually loads all, but let's be safe)
