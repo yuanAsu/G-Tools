@@ -1,39 +1,41 @@
-# Complex Excel Parser
+# [中文](README.md) | [English](README_EN.md)
 
-A Python application for parsing complex Excel files. It supports merged cells, multi-level headers, semantic anchoring, key-value forms, and hierarchical data extraction.
+# 复杂 Excel 解析器 (Complex Excel Parser)
 
-## Features
+这是一个用于解析复杂结构 Excel 文件的 Python 应用程序。它支持合并单元格处理、多级表头展平、语义锚点定位、键值对表单提取以及层级数据提取。
 
-- **Standard Table Parsing:**
-  - Handles merged cells (propagates values).
-  - Flattens multi-level headers.
+## 功能特性
 
-- **Semantic Anchoring (`parse_table_at_anchor`):**
-  - Locates specific tables within a mixed sheet using keywords (e.g., "Funding Assumptions").
-  - Extracts the data region relative to the anchor.
+- **标准表格解析：**
+  - 自动处理合并单元格（将值填充到整个合并区域）。
+  - 将多级表头合并为单行表头（例如 "Q1 - Sales"）。
 
-- **Form Extraction (`parse_form`):**
-  - Scans sheets for Key-Value pairs (e.g., "Project Name: Apollo").
-  - Useful for project details, cover sheets, and unstructured layouts.
+- **语义锚点定位 (`parse_table_at_anchor`)：**
+  - 通过关键词（如“融资假设”）在混合内容的 Sheet 中定位特定表格。
+  - 提取相对于锚点的数据区域。
 
-- **Hierarchy Extraction (`parse_hierarchy`):**
-  - Builds nested JSON/Dictionary structures from indented columns.
-  - Ideal for financial statements (Assets -> Current Assets -> Cash).
+- **表单提取 (`parse_form`)：**
+  - 扫描 Sheet 中的键值对（Key-Value），例如 "项目名称: Apollo"。
+  - 适用于提取项目详情、封面信息等非结构化布局。
 
-## Setup
+- **层级提取 (`parse_hierarchy`)：**
+  - 根据缩进列构建嵌套的 JSON/字典结构。
+  - 非常适合处理财务报表（如 资产 -> 流动资产 -> 现金）。
 
-1. Install dependencies:
+## 安装与设置
+
+1. 安装依赖：
    ```bash
    pip install -r requirements.txt
    ```
 
-2. Generate sample data:
+2. 生成测试数据：
    ```bash
-   python scripts/generate_sample_excel.py  # Basic V1 data
-   python scripts/generate_v2_data.py       # Advanced V2 data (Anchors, Forms, Hierarchy)
+   python scripts/generate_sample_excel.py  # 基础 V1 数据
+   python scripts/generate_v2_data.py       # 高级 V2 数据（包含锚点、表单、层级）
    ```
 
-## Usage
+## 使用示例
 
 ```python
 from src.parser import ExcelParser
@@ -41,23 +43,30 @@ import json
 
 parser = ExcelParser("data/complex_v2.xlsx")
 
-# 1. Semantic Anchor
+# 1. 语义锚点定位
 df_funding = parser.parse_table_at_anchor("Mixed Data", "Funding Assumptions")
 print(df_funding)
 
-# 2. Form Extraction
+# 2. 表单提取
 project_info = parser.parse_form("Project Form")
 print(project_info)
-# {'Project Name': 'Apollo Mission', ...}
+# 输出: {'Project Name': 'Apollo Mission', ...}
 
-# 3. Hierarchy Extraction
+# 3. 层级提取
 financials = parser.parse_hierarchy("Financial Statement")
-print(json.dumps(financials, indent=2))
+print(json.dumps(financials, indent=2, ensure_ascii=False))
 ```
 
-## Testing
+## 工具脚本
 
-Run tests with pytest:
+- `scripts/analyze_excel.py`：检查 Excel 文件的结构（Sheet 名称、合并单元格情况等）。
+  ```bash
+  python scripts/analyze_excel.py data/complex_v2.xlsx
+  ```
+
+## 测试
+
+使用 pytest 运行测试：
 ```bash
 python -m pytest tests/
 ```
