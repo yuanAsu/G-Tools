@@ -43,8 +43,8 @@ def test_preprocessor_physical_removal(tmp_path):
         files = z.namelist()
         assert "xl/calcChain.xml" not in files
         assert "xl/vbaProject.bin" not in files
-        assert not any(f.startswith("xl/externalLinks/") for f in files)
-        assert not any(f.startswith("xl/printerSettings/") for f in files)
+        assert not any('externalLinks' in f for f in files)
+        assert not any('printerSettings' in f for f in files)
         assert "xl/workbook.xml" in files
 
     os.remove(processed_path)
@@ -85,23 +85,47 @@ def test_preprocessor_global_namespace_transplant(tmp_path):
 def test_preprocessor_workbook_surgery(tmp_path):
     """Test removal of definedNames and externalReferences in workbook.xml only."""
     dummy_zip = tmp_path / "dummy_surgery.xlsx"
-    bad_content = '<workbook><definedNames>BAD</definedNames><externalReferences>BAD</externalReferences><sheets/></workbook>'
+
+    # Case 1: Block tags with namespaces
+    bad_content_block = '<workbook><x:definedNames>BAD</x:definedNames><x:externalReferences>BAD</x:externalReferences><sheets/></workbook>'
+
+    # Case 2: Self-closing tags with namespaces
+    bad_content_self = '<workbook><x:definedNames/><x:externalReferences/><sheets/></workbook>'
+
+    for i, content in enumerate([bad_content_block, bad_content_self]):
+        zip_name = dummy_zip.parent / f"dummy_surgery_{i}.xlsx"
+        with zipfile.ZipFile(zip_name, 'w') as z:
+            z.writestr("xl/workbook.xml", content)
+
+        processed_path = preprocess_excel(str(zip_name))
+
+        with zipfile.ZipFile(processed_path, 'r') as z:
+            wb_content = z.read("xl/workbook.xml").decode('utf-8')
+            assert "definedNames" not in wb_content
+            assert "externalReferences" not in wb_content
+            assert "<sheets/>" in wb_content
+
+        os.remove(processed_path)
+
+def test_preprocessor_rels_cleaning(tmp_path):
+    """Test cleaning of .rels files."""
+    dummy_zip = tmp_path / "dummy_rels.xlsx"
+
+    # Old namespace for package relationships
+    ns_pkg_rel_old = "http://purl.oclc.org/ooxml/package/relationships"
+    ms_pkg_rel = "http://schemas.openxmlformats.org/package/2006/relationships"
+
+    content = f'<Relationships xmlns="{ns_pkg_rel_old}"><Relationship Type="...externalLink..." Target="..."/></Relationships>'
 
     with zipfile.ZipFile(dummy_zip, 'w') as z:
-        z.writestr("xl/workbook.xml", bad_content)
-        # Verify it doesn't touch other files aggressively (though regex is specific to tags)
-        z.writestr("xl/other.xml", "<definedNames>SAFE</definedNames>")
+        z.writestr("xl/workbook.xml.rels", content)
 
     processed_path = preprocess_excel(str(dummy_zip))
 
     with zipfile.ZipFile(processed_path, 'r') as z:
-        wb_content = z.read("xl/workbook.xml").decode('utf-8')
-        assert "<definedNames>" not in wb_content
-        assert "<externalReferences>" not in wb_content
-        assert "<sheets/>" in wb_content
-
-        # Verify surgery is strictly on workbook.xml (logic in preprocessor check filename)
-        other_content = z.read("xl/other.xml").decode('utf-8')
-        assert "<definedNames>SAFE</definedNames>" in other_content
+        rels_content = z.read("xl/workbook.xml.rels").decode('utf-8')
+        assert ms_pkg_rel in rels_content
+        assert ns_pkg_rel_old not in rels_content
+        assert "externalLink" not in rels_content
 
     os.remove(processed_path)

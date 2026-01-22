@@ -8,6 +8,7 @@ def preprocess_excel(input_path: str) -> str:
     Preprocesses an Excel file to handle WPS/Strict OOXML issues via Global Gene Repair.
     Returns the path to the processed temporary file.
     """
+    print(f"正在进行全域基因修复: {input_path} ...")
 
     # Create a temp file for the output
     fd, output_path = tempfile.mkstemp(suffix=".xlsx")
@@ -19,20 +20,22 @@ def preprocess_excel(input_path: str) -> str:
                 filename = item.filename
 
                 # 1. Physical Removal
-                # Direct file matches
-                if filename in ["xl/calcChain.xml", "xl/vbaProject.bin"]:
-                    continue
-                # Directory matches (prefixes)
-                if filename.startswith("xl/externalLinks/") or filename.startswith("xl/printerSettings/"):
-                    continue
+                # User logic: if 'externalLinks' in item.filename: continue
+                if 'calcChain' in filename: continue
+                if 'vbaProject' in filename: continue
+                if 'externalLinks' in filename: continue
+                if 'printerSettings' in filename: continue
 
                 content = zin.read(filename)
 
                 # Check if it is an XML-like file that needs processing
-                # Applying Global Namespace Transplant to all XML/rels files
-                is_xml = filename.endswith(".xml") or filename.endswith(".rels")
-
-                if is_xml:
+                if filename.endswith('.xml') and (
+                    filename.endswith('workbook.xml') or
+                    'worksheets/sheet' in filename or
+                    'sharedStrings.xml' in filename or
+                    'styles.xml' in filename or
+                    'drawing' in filename # Covered by 'endswith .xml' in my logic usually, but let's be safe
+                ):
                     content_str = content.decode('utf-8')
 
                     # 2. Global Namespace Transplant
@@ -53,19 +56,44 @@ def preprocess_excel(input_path: str) -> str:
                     )
 
                     # 3. Workbook Surgery (Specific to workbook.xml)
-                    if filename == "xl/workbook.xml":
-                        # Remove <definedNames>...</definedNames>
-                        content_str = re.sub(r"<definedNames>.*?</definedNames>", "", content_str, flags=re.DOTALL)
-                        # Remove <externalReferences>...</externalReferences>
-                        content_str = re.sub(r"<externalReferences>.*?</externalReferences>", "", content_str, flags=re.DOTALL)
+                    if filename.endswith('workbook.xml'):
+                        # Aggressive Regex for definedNames (handles namespaces and self-closing)
+                        # Remove block <...definedNames...>...</...definedNames>
+                        content_str = re.sub(r'<[\w:]*?definedNames.*?>.*?</[\w:]*?definedNames>', '', content_str, flags=re.DOTALL)
+                        # Remove self-closing <...definedNames.../>
+                        content_str = re.sub(r'<[\w:]*?definedNames.*?/>', '', content_str)
 
-                        # Note: Previous implementation removed customWorkbookViews, keeping it minimal as per strict request
-                        # but often definedNames removal is the critical one for crashes.
+                        # Aggressive Regex for externalReferences
+                        content_str = re.sub(r'<[\w:]*?externalReferences.*?>.*?</[\w:]*?externalReferences>', '', content_str, flags=re.DOTALL)
+                        content_str = re.sub(r'<[\w:]*?externalReferences.*?/>', '', content_str)
+
+                    content = content_str.encode('utf-8')
+
+                # 3. .rels Cleaning
+                elif filename.endswith('.rels'):
+                    content_str = content.decode('utf-8')
+
+                    # Replace package relationships namespace
+                    content_str = content_str.replace(
+                        'http://purl.oclc.org/ooxml/package/relationships',
+                        'http://schemas.openxmlformats.org/package/2006/relationships'
+                    )
+                    # Also do the standard ones just in case
+                    content_str = content_str.replace(
+                        "http://purl.oclc.org/ooxml/officeDocument/relationships",
+                        "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+                    )
+
+                    # Remove externalLink relationships
+                    if 'workbook.xml.rels' in filename:
+                        content_str = re.sub(r'<Relationship[^>]*?externalLink[^>]*?/>', '', content_str)
+                        # Also handle non-self-closing if any (rare for Relationships)
 
                     content = content_str.encode('utf-8')
 
                 zout.writestr(item, content)
 
+        print("全域修复完毕")
         return output_path
 
     except Exception as e:
